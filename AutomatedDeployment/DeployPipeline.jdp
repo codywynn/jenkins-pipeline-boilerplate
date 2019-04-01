@@ -1,0 +1,130 @@
+pipeline {
+    agent any
+    stages{
+        stage('Build'){
+            steps {
+                powershell(script: "AutomatedDeployment/Deployment/build.ps1", encoding: 'UTF-8', returnStdout: true)
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'No tests currently'
+            }
+        }
+        stage("Deploy to Development"){
+            when {
+                branch 'develop'
+            }
+            options {
+                withAWS(credentials: 'dev')
+            }
+            steps{
+                echo 'Not implemented'
+            }
+        }
+        stage("Deploy to Automation"){
+            when {
+                branch 'develop'
+            }
+            options {
+                withAWS(credentials: 'dev')
+            }
+            steps {
+                echo 'Not implemented'
+            }
+        }
+        stage("Deploy to QA"){
+            when {
+                branch 'release/*'
+            }
+            options {
+                withAWS(credentials: 'dev')
+            }
+            steps {
+                echo 'Not implemented'
+            }
+        }
+        stage("Deploy to Staging"){
+            when {
+                branch 'release/*'
+            }
+            options {
+                withAWS(credentials: 'prod')
+            }
+            steps {
+                echo 'Not implemented'
+            }
+        }
+        stage("Deploy to Production"){
+            when {
+                branch 'master'
+            }
+            options {
+                withAWS(credentials: 'prod')
+            }
+            steps {
+                echo 'Not implemented'
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def changes = getChangeString();
+                def messageColor = getColorByBuildStatus();
+				slackSend (
+                    baseUrl: 'https://devops.slack.com/services/hooks/jenkins-ci/',
+                    channel: 'build',
+                    color: "${messageColor}",
+                    message: "${currentBuild.fullDisplayName} ${currentBuild.currentResult}\n ${changes}\n\n Build log: ${env.BUILD_URL}",
+                    tokenCredentialId: 'devops_slack_integration_token'
+                )
+                emailext (
+                    recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'CulpritsRecipientProvider']],
+                    subject: "${currentBuild.currentResult}: ${currentBuild.fullDisplayName}",
+                    body: """
+                        <html>
+                            <body>
+                                ${currentBuild.fullDisplayName} build is a ${currentBuild.currentResult}!<br>
+                                Check the attached build log or Jenkins Console Output at ${env.BUILD_URL} for details.<br><br>                            
+								Changes: <br>
+                                ${changes}
+                            </body>
+                        </html>
+                    """,
+                    attachLog: true
+                )
+            }
+        }
+    }   
+}
+@NonCPS
+def getChangeString() {
+    MAX_MSG_LEN = 100
+    def changeString = ""
+
+    def changeLogSets = currentBuild.changeSets
+    for (int i = 0; i < (changeLogSets.size() / 2); i++) {
+        def entries = changeLogSets[i].items
+        for (int j = 0; j < entries.length; j++) {
+            def entry = entries[j]
+            changeString += "\n- ${entry.msg} [${entry.author}]"
+        }
+    }
+
+    if (!changeString) {
+        changeString = "\n- No new changes"
+    }
+    return changeString
+}
+
+@NonCPS
+def getColorByBuildStatus(){
+    def buildColor = "#e0d843"
+    if (currentBuild.currentResult == 'SUCCESS'){
+        buildColor = "good"
+    } else if (currentBuild.currentResult == 'FAILURE') {
+        buildColor = "danger"
+    }
+    return buildColor
+}
