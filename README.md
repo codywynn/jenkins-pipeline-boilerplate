@@ -1,1 +1,1 @@
-# jenkins-pipeline-boilerplate
+# jenkins-pipeline-template
